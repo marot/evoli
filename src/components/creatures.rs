@@ -5,7 +5,9 @@ use amethyst::{
     prelude::*,
     renderer::{Mesh, PosNormTex, PosTex, Shape},
     utils::scene::BasicScenePrefab,
+    shred::{MetaTable, CastFrom},
 };
+use amethyst::assets::{PrefabLoader, PrefabLoaderSystem, RonFormat};
 
 use crate::components::collider;
 use crate::components::combat;
@@ -158,6 +160,71 @@ impl Wander {
 ///
 ///
 pub type CreaturePrefabData = BasicScenePrefab<Vec<PosNormTex>>;
+
+pub type Spawner = Fn(&mut World, f32, f32);
+
+pub trait SpawnerFactory {
+    fn make_spawner(&self) -> Box<Spawner>;
+}
+
+impl<T> CastFrom<T> for SpawnerFactory
+where
+    T: SpawnerFactory + 'static
+{
+    fn cast(t: &T) -> &Self {
+        t
+    }
+
+    fn cast_mut(t: &mut T) -> &mut Self {
+        t
+    }
+}
+
+pub struct SpawnHerbivore(pub Entity);
+pub struct SpawnCarnivore(pub Entity);
+pub struct SpawnPlant(pub Entity);
+
+impl SpawnerFactory for SpawnHerbivore {
+    fn make_spawner(&self) -> Box<Spawner> {
+        let faction = self.0.clone();
+        return Box::new(move |world: &mut World, x: f32, y: f32| {
+            let herbivore_sprite =
+                world
+                    .exec(|loader: PrefabLoader<'_, CreaturePrefabData>| {
+                        loader.load("prefabs/herbivore.ron", RonFormat, (), ())
+                    });
+            create_herbivore(world, x, y, &herbivore_sprite, faction)
+        })
+    }
+}
+
+impl SpawnerFactory for SpawnCarnivore {
+    fn make_spawner(&self) -> Box<Spawner> {
+        let faction = self.0.clone();
+        return Box::new(move |world: &mut World, x: f32, y: f32| {
+            let carnivore_sprite =
+                world
+                    .exec(|loader: PrefabLoader<'_, CreaturePrefabData>| {
+                        loader.load("prefabs/carnivore.ron", RonFormat, (), ())
+                    });
+            create_carnivore(world, x, y, &carnivore_sprite, faction)
+        })
+    }
+}
+
+impl SpawnerFactory for SpawnPlant {
+    fn make_spawner(&self) -> Box<Spawner> {
+        let faction = self.0.clone();
+        return Box::new(move |world: &mut World, x: f32, y: f32| {
+            let plant_sprite =
+                world
+                    .exec(|loader: PrefabLoader<'_, CreaturePrefabData>| {
+                        loader.load("prefabs/plant.ron", RonFormat, (), ())
+                    });
+            create_plant(world, x, y, &plant_sprite, faction)
+        })
+    }
+}
 
 // TODO: Turn this into a generic `create` function
 pub fn create_carnivore(

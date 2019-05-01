@@ -13,6 +13,7 @@ use amethyst::{
     renderer::*,
     ui::UiTransform,
     utils::application_root_dir,
+    shred::{MetaTable},
 };
 
 mod components;
@@ -32,6 +33,7 @@ use crate::resources::world_bounds::*;
 use crate::states::paused::PausedState;
 use crate::systems::collision::DebugCollisionEventSystem;
 use crate::systems::*;
+use core::borrow::Borrow;
 
 amethyst_inspector::inspector![
     Named,
@@ -163,59 +165,29 @@ impl SimpleState for ExampleState {
 
         let (plants, herbivores, carnivores) = create_factions(data.world);
 
-        let carnivore_sprite =
-            data.world
-                .exec(|loader: PrefabLoader<'_, creatures::CreaturePrefabData>| {
-                    loader.load("prefabs/carnivore.ron", RonFormat, (), ())
-                });
-
-        let herbivore_sprite =
-            data.world
-                .exec(|loader: PrefabLoader<'_, creatures::CreaturePrefabData>| {
-                    loader.load("prefabs/herbivore.ron", RonFormat, (), ())
-                });
-
-        for i in 0..2 {
-            for j in 0..2 {
-                let (x, y) = (4.0 * i as f32, 4.0 * j as f32);
-                creatures::create_carnivore(
-                    data.world,
-                    (x - 5.0),
-                    (y - 5.0),
-                    &carnivore_sprite,
-                    carnivores,
-                );
-            }
-        }
-
-        for i in 0..2 {
-            for j in 0..2 {
-                let (x, y) = (4.0 * i as f32, 4.0 * j as f32);
-                creatures::create_herbivore(
-                    data.world,
-                    (x - 5.0),
-                    (y - 5.0),
-                    &herbivore_sprite,
-                    herbivores,
-                );
-            }
-        }
-
-        // Add some plants
-        let plant_sprite =
-            data.world
-                .exec(|loader: PrefabLoader<'_, creatures::CreaturePrefabData>| {
-                    loader.load("prefabs/plant.ron", RonFormat, (), ())
-                });
         let (left, right, bottom, top) = {
             let wb = data.world.read_resource::<WorldBounds>();
             (wb.left, wb.right, wb.bottom, wb.top)
         };
         let mut rng = thread_rng();
-        for _ in 0..25 {
-            let x = rng.gen_range(left, right);
-            let y = rng.gen_range(bottom, top);
-            creatures::create_plant(data.world, x, y, &plant_sprite, plants);
+
+        data.world.add_resource(creatures::SpawnCarnivore(carnivores));
+        data.world.add_resource(creatures::SpawnHerbivore(herbivores));
+        data.world.add_resource(creatures::SpawnPlant(plants));
+
+        let mut table = MetaTable::<creatures::SpawnerFactory>::new();
+        table.register(&creatures::SpawnCarnivore(carnivores));
+        table.register(&creatures::SpawnHerbivore(herbivores));
+        table.register(&creatures::SpawnPlant(plants));
+
+        for _ in 0..5 {
+
+            let ress: Vec<Box<creatures::Spawner>> = table.iter(&mut data.world.res).map(|res| res.make_spawner()).collect();
+            for res in ress {
+                let x = rng.gen_range(left, right);
+                let y = rng.gen_range(bottom, top);
+                res(&mut data.world, x, y);
+            }
         }
 
         // Setup camera
